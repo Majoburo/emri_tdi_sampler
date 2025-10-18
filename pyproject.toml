@@ -5,11 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastemriwaveforms>=2.0.0",
     "lisaanalysistools>=1.1.8",
     "fastlisaresponse>=1.1.9",
     "setuptools>=80.9.0",
     "ultranest>=4.4.0",
+    "fastemriwaveforms-cuda12x>=2.0.0",
 ]
 
 [tool.uv.sources]
