@@ -1,0 +1,72 @@
+annotated_types==0.7.0+computecanada
+astropy==7.0.1+computecanada
+astropy-iers-data==0.2025.10.20.0.39.8
+attrs==25.4.0+computecanada
+beautifulsoup4==4.14.2
+cachetools==5.5.2+computecanada
+certifi==2025.10.5+computecanada
+charset_normalizer==3.4.4+computecanada
+contourpy==1.3.1+computecanada
+corner==2.2.3+computecanada
+cycler==0.12.1+computecanada
+Cython==3.1.5
+distlib @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/distlib/distlib-0.3.9
+eryn==1.2.3
+-e git+https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms.git@ce6e56aeba259ab7300e0c236fca45bd01c804cb#egg=fastemriwaveforms
+-e git+https://github.com/mikekatz04/lisa-on-gpu.git@e507635d347e1be3a4be0f56baee8d7ce289c7dd#egg=fastlisaresponse
+filelock @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/filelock/filelock-3.17.0
+flit_core @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/flit_core/flit_core-3.10.1
+fonttools==4.60.1+computecanada
+gbgpu==1.1.3
+gpubackendtools==0.0.14
+h5py==3.13.0+computecanada
+hatch-vcs @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/hatch_vcs/hatch_vcs-0.4.0
+hatchling @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/hatchling/hatchling-1.27.0
+idna==3.11+computecanada
+jinja2==3.1.6+computecanada
+jsonschema==4.25.1+computecanada
+jsonschema_specifications==2025.9.1+computecanada
+kiwisolver==1.4.8+computecanada
+-e git+https://github.com/mikekatz04/LISAanalysistools.git@c69609ff876d7ba61fd8247e4fc7d10d69cfc61c#egg=lisaanalysistools
+lisaconstants==2.0.1
+lisatools==0.5.1
+llvmlite==0.44.0+computecanada
+markdown_it_py==4.0.0+computecanada
+MarkupSafe==3.0.2+computecanada
+matplotlib==3.10.0+computecanada
+mdurl==0.1.2+computecanada
+multispline==0.8.5
+numba==0.61.2+computecanada
+numpy==2.2.2+computecanada
+nvidia-ml-py==13.580.82
+packaging @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/packaging/packaging-24.2
+pathspec @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/pathspec/pathspec-0.12.1
+pillow==11.1.0+computecanada
+platformdirs @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/platformdirs/platformdirs-4.3.6
+pluggy @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/pluggy/pluggy-1.5.0
+pydantic==2.12.3
+pydantic_core==2.41.4+computecanada
+pyerfa==2.0.1.5+computecanada
+pygments==2.19.2+computecanada
+pyparsing==3.2.5+computecanada
+python_dateutil==2.9.0.post0+computecanada
+PyYAML==6.0.2+computecanada
+referencing==0.37.0
+requests==2.32.5+computecanada
+rich==14.2.0+computecanada
+rpds_py==0.27.0+computecanada
+scipy==1.16.2+computecanada
+setuptools==80.9.0+computecanada
+setuptools-scm @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/setuptools_scm/setuptools_scm-8.1.0
+six==1.17.0+computecanada
+soupsieve==2.8+computecanada
+tomli @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/tomli/tomli-2.2.1
+tqdm==4.67.1+computecanada
+trove-classifiers @ file:///cvmfs/soft.computecanada.ca/easybuild/sources/p/Python/extensions/trove_classifiers-2025.1.15.22-py3-none-any.whl#sha256=5f19c789d4f17f501d36c94dbbf969fb3e8c2784d008e6f5164dd2c3d6a2b07c
+typing_extensions==4.15.0+computecanada
+typing_inspection==0.4.2+computecanada
+ultranest==4.4.0
+urllib3==2.5.0+computecanada
+virtualenv @ file:///tmp/ebuser/avx2/Python/3.13.2/GCCcore-13.3-gentoo/virtualenv/virtualenv-20.29.1
+wheel==0.45.1+computecanada
+wrapt==2.0.0+computecanada

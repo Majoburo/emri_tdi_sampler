@@ -6,13 +6,12 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastlisaresponse>=1.1.9",
-    "lisaanalysistools",
     "setuptools>=80.9.0",
     "ultranest>=4.4.0",
-    "fastemriwaveforms>=2.0.0",
-    #"cupy-cuda12x>=13.6.0",
+    "fastemriwaveforms-cuda12x>=2.0.0",
+    "cupy-cuda12x>=13.6.0",
     "eryn>=1.2.3",
 ]
 
-#[tool.uv.sources]
-#fastlisaresponse = { path = "lisa-on-gpu", editable = true }
+[tool.uv.sources]
+fastlisaresponse = { path = "lisa-on-gpu", editable = true }

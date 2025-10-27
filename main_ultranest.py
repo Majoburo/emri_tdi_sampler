@@ -310,7 +310,7 @@ def main():
         print("Sampling:", sample_names_list, " -> indices:", sample_idx_arr.tolist())
 
     # Determine backend for ResponseWrapper
-    force_backend = None
+    force_backend = "cpu"
     if using_gpu:
         # Auto-detect CUDA version
         try:
@@ -324,6 +324,7 @@ def main():
                 print(f"[backend] Using {force_backend} (CUDA {major}.x)")
         except Exception:
             force_backend = "cpu"
+    print(f"Using backend: {force_backend}")
 
     # Build response model (each rank gets its own)
     resp_local = ResponseWrapper(
@@ -335,7 +336,7 @@ def main():
         remove_garbage=True,
         t0=100000., order=25,
         tdi="1st generation", tdi_chan="AET",
-        orbits=EqualArmlengthOrbits(),
+        orbits=EqualArmlengthOrbits(force_backend=force_backend),
         force_backend=force_backend,
     )
 
