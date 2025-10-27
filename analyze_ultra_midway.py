@@ -19,7 +19,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 try:
-    from ultranest import ReactiveNestedSampler
+    from ultranest import read_file
     HAS_ULTRANEST = True
 except ImportError:
     HAS_ULTRANEST = False
@@ -137,22 +137,21 @@ def main():
         outdir = Path(args.out)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Reading UltraNest sampler from: {log_dir.resolve()}")
+    print(f"Reading UltraNest output from: {log_dir.resolve()}")
 
-    # Try to restore sampler
-    try:
-        sampler = ReactiveNestedSampler.restore(log_dir=str(log_dir))
-        print("  Successfully restored sampler")
-    except Exception as e:
-        print(f"ERROR: Failed to restore sampler: {e}")
-        print("\nTip: Make sure the sampler has written at least some output.")
-        sys.exit(1)
+    # Determine dimensionality from parameter names
+    x_dim = len(args.names)
 
-    # Get results
+    # Try to read results
     try:
-        results = sampler.results
+        sequence, results = read_file(str(log_dir), x_dim=x_dim, verbose=True)
+        print(f"  Successfully read results (dimensionality: {x_dim})")
     except Exception as e:
-        print(f"ERROR: Failed to get results: {e}")
+        print(f"ERROR: Failed to read results: {e}")
+        print(f"\nTip: Make sure:")
+        print(f"  1. The sampler has written at least some output")
+        print(f"  2. The number of parameter names ({x_dim}) matches the actual dimensionality")
+        print(f"  3. Try adjusting --names if you're not sure of the dimensionality")
         sys.exit(1)
 
     # Extract data
@@ -161,13 +160,14 @@ def main():
     logz = float(results.get('logz', np.nan))
     logzerr = float(results.get('logzerr', np.nan))
 
-    # Get log-likelihoods if available
-    logls = np.asarray(results.get('weighted_samples', {}).get('logl', []), dtype=float)
-    if len(logls) == 0:
+    # Get log-likelihoods from weighted_samples
+    weighted_samples = results.get('weighted_samples', {})
+    if isinstance(weighted_samples, dict) and 'logl' in weighted_samples:
+        logls = np.asarray(weighted_samples['logl'], dtype=float)
+        has_logls = True
+    else:
         logls = np.zeros(len(samples))
         has_logls = False
-    else:
-        has_logls = True
 
     # Normalize weights
     if np.sum(weights) > 0:
@@ -220,20 +220,26 @@ def main():
     if has_logls and len(logls) == len(samples):
         trace_plot(outdir / "traces_midway.png", names, samples, logls)
 
-    # Evidence evolution plot (if available)
-    if 'logz_sequence' in results:
-        logz_seq = np.asarray(results['logz_sequence'])
-        if len(logz_seq) > 1:
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.plot(logz_seq, 'k-', linewidth=2)
-            ax.set_xlabel('Iteration')
-            ax.set_ylabel('log(Z)')
-            ax.set_title('Evidence Evolution')
-            ax.grid(True, alpha=0.3)
-            fig.tight_layout()
-            fig.savefig(outdir / "logz_evolution.png", dpi=160)
-            plt.close(fig)
-            print(f"  Saved: {outdir / 'logz_evolution.png'}")
+    # Evidence evolution plot (from sequence data)
+    if 'logz' in sequence and len(sequence['logz']) > 1:
+        logz_seq = np.asarray(sequence['logz'])
+        logzerr_seq = np.asarray(sequence.get('logzerr', np.zeros_like(logz_seq)))
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        iterations = np.arange(len(logz_seq))
+        ax.plot(iterations, logz_seq, 'k-', linewidth=2, label='log(Z)')
+        if np.any(logzerr_seq > 0):
+            ax.fill_between(iterations, logz_seq - logzerr_seq, logz_seq + logzerr_seq,
+                           alpha=0.3, color='gray', label='±1σ')
+        ax.set_xlabel('Iteration')
+        ax.set_ylabel('log(Z)')
+        ax.set_title('Evidence Evolution')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(outdir / "logz_evolution.png", dpi=160)
+        plt.close(fig)
+        print(f"  Saved: {outdir / 'logz_evolution.png'}")
 
     print(f"\nAll outputs saved to: {outdir.resolve()}")
     print("\nYou can re-run this script anytime to see updated results!")
