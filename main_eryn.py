@@ -82,58 +82,58 @@ def create_prior(sample_names, theta0_vals, mode="broad"):
     priors = {}
     t0 = {n: theta0_vals[name_to_idx[n]] for n in param_names}
 
-    for name in sample_names:
+    for i, name in enumerate(sample_names):
         if mode == "broad":
-            # Broad priors
+            # Broad priors - use integer index as key
             if name == "m1":
-                priors[name] = uniform_dist(1e5, 1e8)  # log-space handled in transform
+                priors[i] = uniform_dist(1e5, 1e8)  # log-space handled in transform
             elif name == "m2":
-                priors[name] = uniform_dist(10.0, 100.0)
+                priors[i] = uniform_dist(10.0, 100.0)
             elif name == "a":
-                priors[name] = uniform_dist(0.0, 0.999)
+                priors[i] = uniform_dist(0.0, 0.999)
             elif name == "p0":
-                priors[name] = uniform_dist(7.5, 30.0)
+                priors[i] = uniform_dist(7.5, 30.0)
             elif name == "e0":
-                priors[name] = uniform_dist(0.0, 0.75)
+                priors[i] = uniform_dist(0.0, 0.75)
             elif name == "x0":
-                priors[name] = uniform_dist(-1.0, 1.0)
+                priors[i] = uniform_dist(-1.0, 1.0)
             elif name == "dist":
-                priors[name] = uniform_dist(1e-3, 1e3)
+                priors[i] = uniform_dist(1e-3, 1e3)
             elif name in ["qS", "qK"]:
-                priors[name] = uniform_dist(0.0, np.pi)
+                priors[i] = uniform_dist(0.0, np.pi)
             elif name in ["phiS", "phiK", "Phi_phi0", "Phi_theta0", "Phi_r0"]:
-                priors[name] = uniform_dist(0.0, 2 * np.pi)
+                priors[i] = uniform_dist(0.0, 2 * np.pi)
             else:
                 raise ValueError(f"Unknown parameter: {name}")
 
         elif mode == "zoom":
-            # Narrow priors around injection
+            # Narrow priors around injection - use integer index as key
             if name == "m1":
                 width = 0.2 * t0[name]
-                priors[name] = uniform_dist(max(1e5, t0[name] - width), min(1e8, t0[name] + width))
+                priors[i] = uniform_dist(max(1e5, t0[name] - width), min(1e8, t0[name] + width))
             elif name == "m2":
                 width = 0.2 * t0[name]
-                priors[name] = uniform_dist(max(1.0, t0[name] - width), min(1e3, t0[name] + width))
+                priors[i] = uniform_dist(max(1.0, t0[name] - width), min(1e3, t0[name] + width))
             elif name == "a":
-                priors[name] = uniform_dist(max(0.0, t0[name] - 0.1), min(0.999, t0[name] + 0.1))
+                priors[i] = uniform_dist(max(0.0, t0[name] - 0.1), min(0.999, t0[name] + 0.1))
             elif name == "p0":
                 width = 0.2 * t0[name]
-                priors[name] = uniform_dist(max(7.5, t0[name] - width), min(30.0, t0[name] + width))
+                priors[i] = uniform_dist(max(7.5, t0[name] - width), min(30.0, t0[name] + width))
             elif name == "e0":
                 width = 0.4 * t0[name] if t0[name] > 0 else 0.1
-                priors[name] = uniform_dist(max(0.0, t0[name] - width), min(0.75, t0[name] + width))
+                priors[i] = uniform_dist(max(0.0, t0[name] - width), min(0.75, t0[name] + width))
             elif name == "x0":
-                priors[name] = uniform_dist(max(-1.0, t0[name] - 0.2), min(1.0, t0[name] + 0.2))
+                priors[i] = uniform_dist(max(-1.0, t0[name] - 0.2), min(1.0, t0[name] + 0.2))
             elif name == "dist":
                 width = 0.5 * t0[name]
-                priors[name] = uniform_dist(max(1e-3, t0[name] - width), min(1e3, t0[name] + width))
+                priors[i] = uniform_dist(max(1e-3, t0[name] - width), min(1e3, t0[name] + width))
             elif name in ["qS", "qK"]:
-                priors[name] = uniform_dist(max(0.0, t0[name] - np.pi/4), min(np.pi, t0[name] + np.pi/4))
+                priors[i] = uniform_dist(max(0.0, t0[name] - np.pi/4), min(np.pi, t0[name] + np.pi/4))
             elif name in ["phiS", "phiK", "Phi_phi0", "Phi_theta0", "Phi_r0"]:
                 # For angles, wrap around
                 center = t0[name]
                 width = np.pi / 2
-                priors[name] = uniform_dist(0.0, 2 * np.pi)  # Keep full range for angles
+                priors[i] = uniform_dist(0.0, 2 * np.pi)  # Keep full range for angles
             else:
                 raise ValueError(f"Unknown parameter: {name}")
 
@@ -147,7 +147,7 @@ def log_like_fn(params):
     Log-likelihood function for Eryn
 
     Args:
-        params: Dictionary with parameter names as keys
+        params: Dictionary with integer indices as keys (Eryn format)
 
     Returns:
         log-likelihood value
@@ -157,8 +157,7 @@ def log_like_fn(params):
     # Build full parameter vector
     theta_full = theta0.copy()
     for i, idx in enumerate(sample_idx):
-        param_name = param_names[idx]
-        theta_full[idx] = params[param_name]
+        theta_full[idx] = params[i]  # Use integer index
 
     # Generate waveform
     try:
@@ -190,7 +189,7 @@ def initialize_walkers(sample_names, prior_container, nwalkers, mode="broad", th
         theta0_vals: Injection values (used if mode='zoom')
 
     Returns:
-        coords: Dictionary of initial positions (nwalkers, ndim)
+        coords: Dictionary of initial positions with integer keys (nwalkers, ndim)
     """
     ndim = len(sample_names)
 
@@ -199,7 +198,7 @@ def initialize_walkers(sample_names, prior_container, nwalkers, mode="broad", th
         coords = {}
         t0 = {n: theta0_vals[name_to_idx[n]] for n in param_names}
 
-        for name in sample_names:
+        for i, name in enumerate(sample_names):
             center = t0[name]
 
             # Determine scatter based on parameter type
@@ -208,29 +207,29 @@ def initialize_walkers(sample_names, prior_container, nwalkers, mode="broad", th
                 log_center = np.log10(center)
                 scatter = 0.05
                 log_vals = np.random.normal(log_center, scatter, nwalkers)
-                coords[name] = 10**log_vals
+                coords[i] = 10**log_vals  # Use integer key
             elif name in ["a", "e0", "x0"]:
                 # Absolute scatter
                 scatter = 0.02 if name != "x0" else 0.05
-                coords[name] = np.random.normal(center, scatter, nwalkers)
+                coords[i] = np.random.normal(center, scatter, nwalkers)
             elif name in ["p0", "dist"]:
                 # 5% fractional scatter
                 scatter = 0.05 * center
-                coords[name] = np.random.normal(center, scatter, nwalkers)
+                coords[i] = np.random.normal(center, scatter, nwalkers)
             elif name in ["qS", "qK"]:
                 # Small angle scatter (radians)
                 scatter = 0.1
-                coords[name] = np.random.normal(center, scatter, nwalkers)
-                coords[name] = np.clip(coords[name], 0.0, np.pi)
+                coords[i] = np.random.normal(center, scatter, nwalkers)
+                coords[i] = np.clip(coords[i], 0.0, np.pi)
             elif name in ["phiS", "phiK", "Phi_phi0", "Phi_theta0", "Phi_r0"]:
                 # Angle scatter with wrapping
                 scatter = 0.2
-                coords[name] = np.random.normal(center, scatter, nwalkers)
-                coords[name] = coords[name] % (2 * np.pi)
+                coords[i] = np.random.normal(center, scatter, nwalkers)
+                coords[i] = coords[i] % (2 * np.pi)
             else:
                 # Default: 1% scatter
                 scatter = 0.01 * abs(center) if center != 0 else 0.01
-                coords[name] = np.random.normal(center, scatter, nwalkers)
+                coords[i] = np.random.normal(center, scatter, nwalkers)
     else:
         # Sample from prior
         coords = prior_container.rvs(size=nwalkers)
@@ -336,9 +335,9 @@ def main():
 
     # Print initial positions summary
     print("\nInitial walker positions (mean ± std):")
-    for name in sample_names:
-        mean_val = np.mean(coords[name])
-        std_val = np.std(coords[name])
+    for i, name in enumerate(sample_names):
+        mean_val = np.mean(coords[i])  # Use integer key
+        std_val = np.std(coords[i])
         true_val = theta0[name_to_idx[name]]
         print(f"  {name:>10s}: {mean_val:12.6g} ± {std_val:10.4g}  (true: {true_val:12.6g})")
 
