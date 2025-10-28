@@ -177,7 +177,7 @@ def log_like_fn(params):
 # ------------------------
 # Initialize walkers
 # ------------------------
-def initialize_walkers(sample_names, prior_container, nwalkers, mode="broad", theta0_vals=None):
+def initialize_walkers(sample_names, prior_container, nwalkers, mode="broad", theta0_vals=None, scatter_frac=1e-7):
     """
     Initialize walker positions
 
@@ -187,6 +187,7 @@ def initialize_walkers(sample_names, prior_container, nwalkers, mode="broad", th
         nwalkers: Number of walkers
         mode: 'broad' (sample from prior) or 'zoom' (ball around theta0)
         theta0_vals: Injection values (used if mode='zoom')
+        scatter_frac: Fractional scatter for initialization (default: 1e-7)
 
     Returns:
         coords: Dictionary of initial positions with integer keys (nwalkers, ndim)
@@ -194,42 +195,33 @@ def initialize_walkers(sample_names, prior_container, nwalkers, mode="broad", th
     ndim = len(sample_names)
 
     if mode == "zoom" and theta0_vals is not None:
-        # Start in a ball around injection values
+        # Start in a tight ball around injection values: inj * (1 + scatter_frac)
         coords = {}
         t0 = {n: theta0_vals[name_to_idx[n]] for n in param_names}
 
         for i, name in enumerate(sample_names):
             center = t0[name]
 
-            # Determine scatter based on parameter type
-            if name in ["m1", "m2"]:
-                # 5% scatter in log space
-                log_center = np.log10(center)
-                scatter = 0.05
-                log_vals = np.random.normal(log_center, scatter, nwalkers)
-                coords[i] = 10**log_vals  # Use integer key
-            elif name in ["a", "e0", "x0"]:
-                # Absolute scatter
-                scatter = 0.02 if name != "x0" else 0.05
-                coords[i] = np.random.normal(center, scatter, nwalkers)
-            elif name in ["p0", "dist"]:
-                # 5% fractional scatter
-                scatter = 0.05 * center
-                coords[i] = np.random.normal(center, scatter, nwalkers)
+            # Use fractional scatter: center * scatter_frac
+            if center != 0:
+                scatter = abs(center) * scatter_frac
+            else:
+                scatter = scatter_frac * 1e-3  # For zero values, use small absolute scatter
+
+            # Generate walker positions
+            coords[i] = np.random.normal(center, scatter, nwalkers)
+
+            # Apply bounds for bounded parameters
+            if name in ["a", "e0"]:
+                coords[i] = np.clip(coords[i], 0.0, 0.999 if name == "a" else 0.75)
+            elif name == "x0":
+                coords[i] = np.clip(coords[i], -1.0, 1.0)
             elif name in ["qS", "qK"]:
-                # Small angle scatter (radians)
-                scatter = 0.1
-                coords[i] = np.random.normal(center, scatter, nwalkers)
                 coords[i] = np.clip(coords[i], 0.0, np.pi)
             elif name in ["phiS", "phiK", "Phi_phi0", "Phi_theta0", "Phi_r0"]:
-                # Angle scatter with wrapping
-                scatter = 0.2
-                coords[i] = np.random.normal(center, scatter, nwalkers)
-                coords[i] = coords[i] % (2 * np.pi)
-            else:
-                # Default: 1% scatter
-                scatter = 0.01 * abs(center) if center != 0 else 0.01
-                coords[i] = np.random.normal(center, scatter, nwalkers)
+                coords[i] = coords[i] % (2 * np.pi)  # Wrap angles
+            elif name in ["m1", "m2", "dist"]:
+                coords[i] = np.maximum(coords[i], 1e-10)  # Keep positive
     else:
         # Sample from prior
         coords = prior_container.rvs(size=nwalkers)
@@ -289,6 +281,8 @@ def parse_args():
     p.add_argument("--nsteps", type=int, default=5000, help="Number of MCMC steps (default: 5000)")
     p.add_argument("--burn", type=int, default=1000, help="Burn-in steps to discard (default: 1000)")
     p.add_argument("--thin", type=int, default=1, help="Thinning factor (default: 1)")
+    p.add_argument("--init-scatter", type=float, default=1e-7,
+                   help="Fractional scatter for walker initialization: inj*(1 + scatter) (default: 1e-7)")
     return p.parse_args()
 
 # ------------------------
@@ -329,9 +323,10 @@ def main():
     prior = create_prior(sample_names, theta0, mode=args.prior)
 
     # Initialize walkers
-    print(f"Initializing {args.nwalkers} walkers...")
+    print(f"Initializing {args.nwalkers} walkers (scatter={args.init_scatter})...")
     coords = initialize_walkers(sample_names, prior, args.nwalkers,
-                                 mode=args.prior, theta0_vals=theta0)
+                                 mode=args.prior, theta0_vals=theta0,
+                                 scatter_frac=args.init_scatter)
 
     # Print initial positions summary
     print("\nInitial walker positions (mean ± std):")
@@ -343,12 +338,13 @@ def main():
 
     # Create sampler
     print("\nCreating Eryn sampler...")
+    # Note: branch_names should be a single-element list for single-model sampling
+    # The actual parameter names are tracked separately
     sampler = EnsembleSampler(
         args.nwalkers,
         ndim,
         log_like_fn,
         prior,
-        branch_names=sample_names,
     )
 
     # Create initial state
