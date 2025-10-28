@@ -349,7 +349,9 @@ def main():
 
     # Create initial state
     print("Creating initial state...")
-    state = State(coords)
+    # Convert coords dict to numpy array: (nwalkers, ndim)
+    coords_array = np.column_stack([coords[i] for i in range(ndim)])
+    state = State(coords_array)
 
     # Run MCMC
     print(f"\nRunning MCMC for {args.nsteps} steps...")
