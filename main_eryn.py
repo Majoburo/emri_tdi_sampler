@@ -6,21 +6,46 @@ Eryn is an ensemble MCMC sampler useful for:
 - Starting from a ball around known good values
 - Problems where nested sampling struggles to converge
 - Faster exploration when you're near the solution
+- GPU acceleration for waveform generation
+- MPI parallelization across multiple cores/nodes
+- Automatic checkpointing for long runs
 
 Usage:
+  # Basic run (CPU, single core)
   python main_eryn.py --prior zoom --samples m1 m2 p0 e0 --nwalkers 32 --nsteps 5000
-  python main_eryn.py --prior broad --samples m1 m2 a p0 e0 x0 --nwalkers 64 --nsteps 10000
+
+  # GPU acceleration
+  python main_eryn.py --prior zoom --samples m1 m2 p0 e0 --backend gpu --nwalkers 32 --nsteps 5000
+
+  # MPI parallelization (4 processes)
+  mpirun -n 4 python main_eryn.py --use-mpi --prior zoom --samples m1 m2 p0 e0 --nwalkers 32 --nsteps 5000
+
+  # Resume from checkpoint
+  python main_eryn.py --resume --results eryn_results --nsteps 10000
+
+  # GPU + MPI (8 GPUs)
+  mpirun -n 8 python main_eryn.py --use-mpi --backend gpu --prior zoom --samples m1 m2 p0 e0 --nwalkers 64 --nsteps 10000
 """
 from __future__ import annotations
 import argparse
 import pickle
 from pathlib import Path
 import numpy as np
+import sys
+
+# MPI support (optional)
+try:
+    from mpi4py import MPI
+    MPI_AVAILABLE = True
+except ImportError:
+    MPI_AVAILABLE = False
+    MPI = None
 
 # Eryn MCMC
 from eryn.ensemble import EnsembleSampler
 from eryn.prior import ProbDistContainer, uniform_dist
 from eryn.state import State
+from eryn.backends import HDFBackend
 
 # FEW + LISA Tools
 from few.waveform import GenerateEMRIWaveform
@@ -231,13 +256,17 @@ def initialize_walkers(sample_names, prior_container, nwalkers, mode="broad", th
 # ------------------------
 # Setup model & data
 # ------------------------
-def setup(tobs: float, dt: float):
-    """Setup response wrapper and data"""
+def setup(tobs: float, dt: float, backend: str = "cpu"):
+    """Setup response wrapper and data
+
+    Args:
+        tobs: Observation time in years
+        dt: Sample spacing in seconds
+        backend: 'cpu' or 'gpu'
+    """
     global resp, freqs, analysis
 
-    # Use CPU backend (matching main_ultranest.py)
-    force_backend = "cpu"
-    print(f"Using backend: {force_backend}")
+    print(f"Using backend: {backend}")
 
     resp_local = ResponseWrapper(
         gen_wave, tobs, dt,
@@ -248,8 +277,8 @@ def setup(tobs: float, dt: float):
         remove_garbage=True,
         t0=100000., order=25,
         tdi="1st generation", tdi_chan="AET",
-        orbits=EqualArmlengthOrbits(force_backend=force_backend),
-        force_backend=force_backend,
+        orbits=EqualArmlengthOrbits(force_backend=backend),
+        force_backend=backend,
     )
 
     # Generate data
@@ -283,6 +312,17 @@ def parse_args():
     p.add_argument("--thin", type=int, default=1, help="Thinning factor (default: 1)")
     p.add_argument("--init-scatter", type=float, default=1e-7,
                    help="Fractional scatter for walker initialization: inj*(1 + scatter) (default: 1e-7)")
+
+    # Backend and parallelization options
+    p.add_argument("--backend", choices=["cpu", "gpu"], default="cpu",
+                   help="Compute backend: cpu or gpu (default: cpu)")
+    p.add_argument("--checkpoint", type=int, default=100,
+                   help="Save checkpoint every N steps (default: 100)")
+    p.add_argument("--resume", action="store_true",
+                   help="Resume from existing checkpoint in results directory")
+    p.add_argument("--use-mpi", action="store_true",
+                   help="Use MPI parallelization (requires mpirun/mpiexec)")
+
     return p.parse_args()
 
 # ------------------------
@@ -291,6 +331,24 @@ def parse_args():
 def main():
     global sample_idx
     args = parse_args()
+
+    # MPI setup
+    use_mpi = args.use_mpi and MPI_AVAILABLE
+    if args.use_mpi and not MPI_AVAILABLE:
+        print("WARNING: --use-mpi specified but mpi4py not available. Running without MPI.")
+        use_mpi = False
+
+    if use_mpi:
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+    else:
+        rank = 0
+        size = 1
+        comm = None
+
+    # Only rank 0 prints
+    is_main = (rank == 0)
 
     # Validate sample names
     for n in args.samples:
@@ -301,75 +359,136 @@ def main():
     sample_idx = np.array([name_to_idx[n] for n in sample_names], dtype=int)
     ndim = len(sample_idx)
 
-    print("=" * 60)
-    print("EMRI TDI Sampler - Eryn (MCMC)")
-    print("=" * 60)
-    print(f"Sampling: {sample_names}")
-    print(f"Dimensionality: {ndim}")
-    print(f"Prior mode: {args.prior}")
-    print(f"Walkers: {args.nwalkers}")
-    print(f"Steps: {args.nsteps}")
-    print(f"Burn-in: {args.burn}")
-    print(f"Tobs: {args.tobs} yr")
-    print(f"dt: {args.dt} s")
-    print("=" * 60)
+    if is_main:
+        print("=" * 60)
+        print("EMRI TDI Sampler - Eryn (MCMC)")
+        print("=" * 60)
+        print(f"Sampling: {sample_names}")
+        print(f"Dimensionality: {ndim}")
+        print(f"Prior mode: {args.prior}")
+        print(f"Backend: {args.backend}")
+        if use_mpi:
+            print(f"MPI: Enabled ({size} processes)")
+        else:
+            print("MPI: Disabled")
+        print(f"Walkers: {args.nwalkers}")
+        print(f"Steps: {args.nsteps}")
+        print(f"Burn-in: {args.burn}")
+        print(f"Checkpoint every: {args.checkpoint} steps")
+        print(f"Tobs: {args.tobs} yr")
+        print(f"dt: {args.dt} s")
+        print("=" * 60)
 
     # Setup model
-    print("\nSetting up model...")
-    setup(args.tobs, args.dt)
+    if is_main:
+        print("\nSetting up model...")
+    setup(args.tobs, args.dt, backend=args.backend)
+
+    # Setup output directory and checkpoint backend
+    outdir = Path(args.results)
+    if is_main:
+        outdir.mkdir(parents=True, exist_ok=True)
+
+    # Wait for directory creation
+    if use_mpi:
+        comm.barrier()
+
+    # Setup HDF backend for checkpointing
+    backend_file = outdir / "eryn_chains.h5"
+
+    if args.resume and backend_file.exists():
+        if is_main:
+            print(f"\nResuming from checkpoint: {backend_file}")
+        backend = HDFBackend(str(backend_file), name="mcmc")
+
+        # Get the state to resume from
+        initial_state = None
+        steps_to_run = args.nsteps
+        if is_main:
+            print(f"Previous run completed {backend.iteration} steps")
+            if backend.iteration >= args.nsteps:
+                print(f"WARNING: Checkpoint has already completed {backend.iteration} steps, which is >= requested {args.nsteps} steps")
+                print("No additional steps to run. Exiting.")
+                sys.exit(0)
+            steps_to_run = args.nsteps - backend.iteration
+            print(f"Will run {steps_to_run} additional steps to reach {args.nsteps} total")
+    else:
+        if is_main:
+            if args.resume:
+                print(f"\nNo checkpoint found at {backend_file}, starting fresh run")
+            print(f"Creating checkpoint file: {backend_file}")
+        backend = HDFBackend(str(backend_file), name="mcmc")
+        backend.reset(args.nwalkers, ndim)
+        initial_state = None
+        steps_to_run = args.nsteps
+
+    # Wait for backend setup
+    if use_mpi:
+        comm.barrier()
 
     # Create prior
-    print(f"Creating prior (mode={args.prior})...")
+    if is_main:
+        print(f"\nCreating prior (mode={args.prior})...")
     prior = create_prior(sample_names, theta0, mode=args.prior)
 
-    # Initialize walkers
-    print(f"Initializing {args.nwalkers} walkers (scatter={args.init_scatter})...")
-    coords = initialize_walkers(sample_names, prior, args.nwalkers,
-                                 mode=args.prior, theta0_vals=theta0,
-                                 scatter_frac=args.init_scatter)
+    # Initialize walkers (only if not resuming)
+    if initial_state is None and backend.iteration == 0:
+        if is_main:
+            print(f"Initializing {args.nwalkers} walkers (scatter={args.init_scatter})...")
+        coords = initialize_walkers(sample_names, prior, args.nwalkers,
+                                     mode=args.prior, theta0_vals=theta0,
+                                     scatter_frac=args.init_scatter)
 
-    # Print initial positions summary
-    print("\nInitial walker positions (mean ± std):")
-    for i, name in enumerate(sample_names):
-        mean_val = np.mean(coords[i])  # Use integer key
-        std_val = np.std(coords[i])
-        true_val = theta0[name_to_idx[name]]
-        print(f"  {name:>10s}: {mean_val:12.6g} ± {std_val:10.4g}  (true: {true_val:12.6g})")
+        # Print initial positions summary
+        if is_main:
+            print("\nInitial walker positions (mean ± std):")
+            for i, name in enumerate(sample_names):
+                mean_val = np.mean(coords[i])  # Use integer key
+                std_val = np.std(coords[i])
+                true_val = theta0[name_to_idx[name]]
+                print(f"  {name:>10s}: {mean_val:12.6g} ± {std_val:10.4g}  (true: {true_val:12.6g})")
+
+        # Convert coords dict to numpy array: (nwalkers, ndim)
+        coords_array = np.column_stack([coords[i] for i in range(ndim)])
+        initial_state = State(coords_array)
 
     # Create sampler
-    print("\nCreating Eryn sampler...")
-    # Note: branch_names should be a single-element list for single-model sampling
-    # The actual parameter names are tracked separately
+    if is_main:
+        print("\nCreating Eryn sampler...")
     sampler = EnsembleSampler(
         args.nwalkers,
         ndim,
         log_like_fn,
         prior,
+        backend=backend,
+        pool=comm if use_mpi else None,
     )
 
-    # Create initial state
-    print("Creating initial state...")
-    # Convert coords dict to numpy array: (nwalkers, ndim)
-    coords_array = np.column_stack([coords[i] for i in range(ndim)])
-    state = State(coords_array)
-
     # Run MCMC
-    print(f"\nRunning MCMC for {args.nsteps} steps...")
-    print("(This may take a while...)\n")
+    if is_main:
+        if args.resume and backend.iteration > 0:
+            print(f"\nContinuing MCMC for {steps_to_run} additional steps (total: {args.nsteps})...")
+        else:
+            print(f"\nRunning MCMC for {args.nsteps} steps...")
+        print("(This may take a while...)\n")
 
-    sampler.run_mcmc(state, args.nsteps, progress=True, thin_by=args.thin)
+    sampler.run_mcmc(initial_state, steps_to_run, progress=is_main, thin_by=args.thin)
 
-    # Save results
-    outdir = Path(args.results)
-    outdir.mkdir(parents=True, exist_ok=True)
+    # Wait for all processes to finish
+    if use_mpi:
+        comm.barrier()
 
-    print(f"\nSaving results to: {outdir.resolve()}")
+    # Only rank 0 saves additional output files and prints summaries
+    if not is_main:
+        return
 
-    # Get chains
-    chain = sampler.get_chain()  # shape: (nsteps, nwalkers, ndim)
-    log_prob = sampler.get_log_prob()  # shape: (nsteps, nwalkers)
+    print(f"\nSaving additional results to: {outdir.resolve()}")
 
-    # Save raw chains
+    # Get chains from backend
+    chain = backend.get_chain()  # shape: (nsteps, nwalkers, ndim)
+    log_prob = backend.get_log_prob()  # shape: (nsteps, nwalkers)
+
+    # Save raw chains as pickle (backup/compatibility)
     results = {
         'chain': chain,
         'log_prob': log_prob,
@@ -381,6 +500,8 @@ def main():
         'burn': args.burn,
         'thin': args.thin,
         'prior_mode': args.prior,
+        'backend': args.backend,
+        'use_mpi': use_mpi,
     }
 
     with open(outdir / "eryn_chains.pkl", "wb") as f:
@@ -427,7 +548,8 @@ def main():
         print(f"{name:<12} {mean_val:<12.6g} {std_val:<12.6g} {p16:<12.6g} {p50:<12.6g} {p84:<12.6g} {true_val:<12.6g}")
 
     print(f"\nSaved:")
-    print(f"  - {outdir / 'eryn_chains.pkl'} (full chains)")
+    print(f"  - {outdir / 'eryn_chains.h5'} (HDF5 checkpoint/chains)")
+    print(f"  - {outdir / 'eryn_chains.pkl'} (pickle backup)")
     print(f"  - {outdir / 'eryn_samples.npz'} (flattened samples)")
     print("\nDone!")
 

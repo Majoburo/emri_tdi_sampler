@@ -1,9 +1,9 @@
-[submodule "FastEMRIWaveforms"]
-	path = FastEMRIWaveforms
+[submodule "gitsubmodules/FastEMRIWaveforms"]
+	path = gitsubmodules/FastEMRIWaveforms
 	url = https://github.com/BlackHolePerturbationToolkit/FastEMRIWaveforms.git
-[submodule "LISAanalysistools"]
-	path = LISAanalysistools
-    url = https://github.com/mikekatz04/LISAanalysistools.git
-[submodule "lisa-on-gpu"]
-    path = lisa-on-gpu
-    url = https://github.com/mikekatz04/lisa-on-gpu.git
+[submodule "gitsubmodules/LISAanalysistools"]
+	path = gitsubmodules/LISAanalysistools
+	url = https://github.com/mikekatz04/LISAanalysistools.git
+[submodule "gitsubmodules/lisa-on-gpu"]
+	path = gitsubmodules/lisa-on-gpu
+	url = https://github.com/mikekatz04/lisa-on-gpu.git

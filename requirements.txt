@@ -1,7 +1,11 @@
-lisaanalysistools
+#lisaanalysistools
 setuptools>=80.9.0
 ultranest>=4.4.0
-fastemriwaveforms
+#fastemriwaveforms
 # cupy-cuda12x>=13.6.0   # GPU optional: uncomment only if your CUDA toolchain matches
 eryn
-fastlisaresponse
+dynesty
+#fastlisaresponse
+-e gitsubmodules/FastEMRIWaveforms
+-e gitsubmodules/LISAanalysistools
+-e gitsubmodules/lisa-on-gpu
