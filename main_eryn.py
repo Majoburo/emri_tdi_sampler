@@ -267,7 +267,7 @@ def setup(tobs: float, dt: float, backend: str = "cpu"):
     global resp, freqs, analysis
 
     print(f"Using backend: {backend}")
-
+    breakpoint()
     resp_local = ResponseWrapper(
         gen_wave, tobs, dt,
         index_lambda=8, index_beta=7,
