@@ -418,7 +418,7 @@ def main():
                 print(f"\nNo checkpoint found at {backend_file}, starting fresh run")
             print(f"Creating checkpoint file: {backend_file}")
         backend = HDFBackend(str(backend_file), name="mcmc")
-        backend.reset(args.nwalkers, ndim)
+        # Don't reset yet - we'll do it after creating the sampler so we have moves info
         initial_state = None
         steps_to_run = args.nsteps
 
@@ -455,14 +455,29 @@ def main():
     # Create sampler
     if is_main:
         print("\nCreating Eryn sampler...")
-    sampler = EnsembleSampler(
-        args.nwalkers,
-        ndim,
-        log_like_fn,
-        prior,
-        backend=backend,
-        pool=comm if use_mpi else None,
-    )
+
+    # When starting fresh, create sampler first, then reset backend with moves info
+    if backend.iteration == 0:
+        sampler = EnsembleSampler(
+            args.nwalkers,
+            ndim,
+            log_like_fn,
+            prior,
+            pool=comm if use_mpi else None,
+        )
+        # Now reset backend with the sampler's moves information
+        backend.reset(args.nwalkers, ndim, moves=sampler.moves)
+        sampler.backend = backend
+    else:
+        # When resuming, pass backend normally
+        sampler = EnsembleSampler(
+            args.nwalkers,
+            ndim,
+            log_like_fn,
+            prior,
+            backend=backend,
+            pool=comm if use_mpi else None,
+        )
 
     # Run MCMC
     if is_main:
